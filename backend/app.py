@@ -1,152 +1,112 @@
-from flask import Flask, request, jsonify, render_template, send_from_directory
+# ================================================================
+#  app.py — Phishing Analyzer API
+#  AXIS IT Security  ·  v1.0
+#
+#  Deployed on Render.com
+#  Frontend is hosted separately on Netlify
+# ================================================================
+
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 from analyzer import SimplePhishingAnalyzer
-from pathlib import Path
 import os
 import uuid
 
-# --------------------------------------------------
-# Paths
-# --------------------------------------------------
-BASE_DIR = Path(__file__).resolve().parent
-FRONTEND_DIR = BASE_DIR.parent / "frontend"
+app = Flask(__name__)
 
-# --------------------------------------------------
-# Flask App
-# --------------------------------------------------
-app = Flask(
-    __name__,
-    static_folder=str(FRONTEND_DIR),
-    template_folder=str(FRONTEND_DIR)
-)
-
-CORS(app)
+# Allow requests from Netlify frontend only
+CORS(app, origins=[
+    'https://jocular-dragon-04a7c0.netlify.app',
+    'http://localhost:5000',
+    'http://127.0.0.1:5000'
+])
 
 analyzer = SimplePhishingAnalyzer()
 
-# --------------------------------------------------
-# Frontend Routes
-# --------------------------------------------------
-@app.route("/")
-def index():
-    return render_template("taskpane.html")
+
+# ── Health check ─────────────────────────────────────────────────
+@app.route('/health', methods=['GET'])
+def health_check():
+    return jsonify({
+        'status':  'healthy',
+        'service': 'Phishing Email Analyzer API'
+    }), 200
 
 
-@app.route("/taskpane.css")
-def taskpane_css():
-    return send_from_directory(FRONTEND_DIR, "taskpane.css")
-
-
-@app.route("/taskpane.js")
-def taskpane_js():
-    return send_from_directory(FRONTEND_DIR, "taskpane.js")
-
-
-@app.route("/assets/<path:filename>")
-def assets(filename):
-    return send_from_directory(FRONTEND_DIR / "assets", filename)
-
-
-@app.route("/favicon.ico")
-def favicon():
-    return send_from_directory(
-        FRONTEND_DIR / "assets",
-        "icon-32.png",
-        mimetype="image/png"
-    )
-
-# --------------------------------------------------
-# Analyze Endpoint
-# --------------------------------------------------
-@app.route("/analyze", methods=["POST"])
+# ── Analyze endpoint ─────────────────────────────────────────────
+@app.route('/analyze', methods=['POST'])
 def analyze_email():
+    """
+    Expects JSON:
+    {
+        "email_text": "full email with headers",
+        "attachments": [{"name": "file.exe", "size": 1024}]
+    }
+    """
     try:
         data = request.get_json()
 
-        if not data:
-            return jsonify({
-                "success": False,
-                "error": "No JSON received"
-            }), 400
+        if not data or 'email_text' not in data:
+            return jsonify({'error': 'Missing email_text'}), 400
 
-        email_text = data.get("email_text", "")
+        email_text = data['email_text']
 
-        if not email_text.strip():
-            return jsonify({
-                "success": False,
-                "error": "Email text is empty"
-            }), 400
+        if not email_text or not email_text.strip():
+            return jsonify({'error': 'Empty email text'}), 400
 
-        attachments = data.get("attachments", [])
+        attachments = data.get('attachments', None)
 
         result = analyzer.analyze(email_text, attachments)
 
         return jsonify({
-            "success": True,
-            "analysis": result
-        })
+            'success':  True,
+            'analysis': result
+        }), 200
 
     except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
+        return jsonify({'error': f'Analysis failed: {str(e)}'}), 500
 
 
-# --------------------------------------------------
-# Report Endpoint
-# --------------------------------------------------
-@app.route("/report", methods=["POST"])
+# ── Report endpoint ───────────────────────────────────────────────
+@app.route('/report', methods=['POST'])
 def report_phishing():
+    """
+    Expects JSON:
+    {
+        "email_text": "full email content",
+        "analysis":   { ...analysis object from /analyze... }
+    }
+    """
     try:
         data = request.get_json()
 
-        email_text = data.get("email_text", "")
-        analysis = data.get("analysis", {})
+        if not data or 'email_text' not in data:
+            return jsonify({'error': 'Missing email_text'}), 400
 
+        analysis  = data.get('analysis', {})
         report_id = str(uuid.uuid4())
 
-        print("\n=== PHISHING REPORT ===")
-        print("Report ID:", report_id)
-        print("Sender:", analysis.get("sender"))
-        print("Subject:", analysis.get("subject"))
-        print("Risk Score:", analysis.get("risk_score"))
-        print("=======================\n")
+        # Log the report — in production connect this to your
+        # security ticketing system (e.g. ServiceNow, Jira)
+        print(f"[PHISHING REPORT] ID: {report_id}")
+        print(f"  Sender:     {analysis.get('sender',     'Unknown')}")
+        print(f"  Subject:    {analysis.get('subject',    'Unknown')}")
+        print(f"  Risk Score: {analysis.get('risk_score', 0)}")
+        print(f"  Risk Level: {analysis.get('risk_level', 'Unknown')}")
 
         return jsonify({
-            "success": True,
-            "report_id": report_id,
-            "message": "Email reported successfully"
-        })
+            'success':   True,
+            'report_id': report_id,
+            'message':   'Email reported to security team'
+        }), 200
 
     except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
+        return jsonify({'error': f'Report failed: {str(e)}'}), 500
 
 
-# --------------------------------------------------
-# Health Check
-# --------------------------------------------------
-@app.route("/health")
-def health():
-    return jsonify({
-        "status": "healthy"
-    })
-
-
-# --------------------------------------------------
-# Startup
-# --------------------------------------------------
-if __name__ == "__main__":
-    print("\nRoutes Loaded:")
-    print(app.url_map)
-
-    port = int(os.environ.get("PORT", 5000))
-
-    app.run(
-        host="0.0.0.0",
-        port=port,
-        debug=True
-    )
+# ── Local development only ────────────────────────────────────────
+if __name__ == '__main__':
+    port  = int(os.environ.get('PORT', 5000))
+    debug = os.environ.get('DEBUG', 'False').lower() == 'true'
+    print(f"Starting Phishing Analyzer API on port {port}")
+    app.run(host='0.0.0.0', port=port, debug=debug)
