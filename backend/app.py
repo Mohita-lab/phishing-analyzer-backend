@@ -23,6 +23,13 @@ CORS(app, origins=[
 
 analyzer = SimplePhishingAnalyzer()
 
+@app.route('/')
+def home():
+    return jsonify({
+        "service": "Phishing Email Analyzer API",
+        "status": "running"
+    })
+
 
 # ── Health check ─────────────────────────────────────────────────
 @app.route('/health', methods=['GET'])
