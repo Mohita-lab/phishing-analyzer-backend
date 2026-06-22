@@ -17,7 +17,6 @@ app = Flask(__name__)
 # Allow requests from Netlify frontend only
 CORS(app, origins=[
     'https://gilded-trifle-133800.netlify.app',
-    'https://jocular-dragon-04a7c0.netlify.app',
     'http://localhost:5000',
     'http://127.0.0.1:5000'
 ])
