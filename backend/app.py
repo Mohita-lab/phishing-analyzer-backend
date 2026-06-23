@@ -1,9 +1,8 @@
 import os
 import uuid
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from functools import wraps
-
 from flask import Flask, request, jsonify, g
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -34,9 +33,23 @@ db_url = os.getenv("DATABASE_URL", "sqlite:///phishing_analyzer.db")
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 
+if "sslmode" not in db_url:
+    db_url += "?sslmode=require"
+
 app.config["SQLALCHEMY_DATABASE_URI"] = db_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-change-me")
+
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+    "pool_pre_ping": True,
+    "pool_recycle": 280,
+    "pool_size": 5,
+    "max_overflow": 10,
+    "connect_args": {
+        "sslmode": "require"
+    }
+}
+
 db.init_app(app)
 
 # ── Services ──────────────────────────────────────────────────────
@@ -210,7 +223,9 @@ def acknowledge_alert(alert_id):
 @require_auth
 def analytics_overview():
     days = int(request.args.get("days", 30))
-    total      = EmailAnalysis.query.count()
+    from sqlalchemy import func
+
+    total = db.session.query(func.count(EmailAnalysis.id)).scalar() or 0
     phishing   = EmailAnalysis.query.filter_by(is_phishing=True).count()
     safe       = total - phishing
     avg_score  = db.session.query(db.func.avg(EmailAnalysis.risk_score)).scalar() or 0
@@ -245,8 +260,15 @@ def analytics_trends():
 @require_auth
 def analytics_top_senders():
     days = int(request.args.get("days", 30))
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    
     results = (
-        db.session.query(EmailAnalysis.sender, db.func.count(EmailAnalysis.id).label("count"))
+        db.session.query(
+            EmailAnalysis.sender,
+            db.func.count(EmailAnalysis.id).label("count")
+        )
+        .filter(EmailAnalysis.timestamp >= cutoff)
         .group_by(EmailAnalysis.sender)
         .order_by(db.func.count(EmailAnalysis.id).desc())
         .limit(10)
@@ -258,9 +280,15 @@ def analytics_top_senders():
 @app.route("/api/analytics/top-indicators")
 @require_auth
 def analytics_top_indicators():
-    days = int(request.args.get("days", 30))
-    records = EmailAnalysis.query.filter_by(is_phishing=True).all()
     counts = {}
+    days = int(request.args.get("days", 30))
+    
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    
+    records = EmailAnalysis.query.filter(
+    EmailAnalysis.is_phishing == True,
+    EmailAnalysis.timestamp >= cutoff
+).all()
     for r in records:
         for ind in (r.indicators or []):
             title = ind.get("title", "Unknown")
