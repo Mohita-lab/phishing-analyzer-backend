@@ -7,11 +7,11 @@ python-dotenv==1.0.0
 
 gunicorn==21.2.0
 
-psycopg2-binary==2.9.9
+psycopg2-binary
 
-numpy==1.26.4
-pandas==2.2.2
-scikit-learn==1.4.2
+numpy
+pandas
+scikit-learn
 
 APScheduler==3.10.4
 
