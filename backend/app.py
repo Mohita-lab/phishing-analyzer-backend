@@ -205,6 +205,89 @@ def acknowledge_alert(alert_id):
     return jsonify({"success": True})
 
 
+# ── Analytics routes (used by dashboard) ─────────────────────────
+@app.route("/api/analytics/overview")
+@require_auth
+def analytics_overview():
+    days = int(request.args.get("days", 30))
+    total      = EmailAnalysis.query.count()
+    phishing   = EmailAnalysis.query.filter_by(is_phishing=True).count()
+    safe       = total - phishing
+    avg_score  = db.session.query(db.func.avg(EmailAnalysis.risk_score)).scalar() or 0
+    return jsonify({
+        "total_analyzed": total,
+        "phishing_count": phishing,
+        "safe_count": safe,
+        "avg_risk_score": round(avg_score, 1),
+        "days": days,
+    })
+
+
+@app.route("/api/analytics/trends")
+@require_auth
+def analytics_trends():
+    days = int(request.args.get("days", 30))
+    records = EmailAnalysis.query.order_by(EmailAnalysis.timestamp.desc()).limit(days * 10).all()
+    # Group by date
+    by_date = {}
+    for r in records:
+        date = r.timestamp.strftime("%Y-%m-%d")
+        if date not in by_date:
+            by_date[date] = {"date": date, "total": 0, "phishing": 0}
+        by_date[date]["total"] += 1
+        if r.is_phishing:
+            by_date[date]["phishing"] += 1
+    trends = sorted(by_date.values(), key=lambda x: x["date"])
+    return jsonify({"trends": trends, "days": days})
+
+
+@app.route("/api/analytics/top-senders")
+@require_auth
+def analytics_top_senders():
+    days = int(request.args.get("days", 30))
+    results = (
+        db.session.query(EmailAnalysis.sender, db.func.count(EmailAnalysis.id).label("count"))
+        .group_by(EmailAnalysis.sender)
+        .order_by(db.func.count(EmailAnalysis.id).desc())
+        .limit(10)
+        .all()
+    )
+    return jsonify({"top_senders": [{"sender": r.sender, "count": r.count} for r in results]})
+
+
+@app.route("/api/analytics/top-indicators")
+@require_auth
+def analytics_top_indicators():
+    days = int(request.args.get("days", 30))
+    records = EmailAnalysis.query.filter_by(is_phishing=True).all()
+    counts = {}
+    for r in records:
+        for ind in (r.indicators or []):
+            title = ind.get("title", "Unknown")
+            counts[title] = counts.get(title, 0) + 1
+    sorted_indicators = sorted(counts.items(), key=lambda x: x[1], reverse=True)[:10]
+    return jsonify({"top_indicators": [{"title": t, "count": c} for t, c in sorted_indicators]})
+
+
+@app.route("/api/analytics/recent-alerts")
+@require_auth
+def analytics_recent_alerts():
+    limit = int(request.args.get("limit", 10))
+    alerts = AnomalyAlert.query.order_by(AnomalyAlert.timestamp.desc()).limit(limit).all()
+    return jsonify({"alerts": [
+        {"id": a.id, "alert_type": a.alert_type, "severity": a.severity,
+         "description": a.description, "timestamp": a.timestamp.isoformat(),
+         "acknowledged": a.acknowledged}
+        for a in alerts
+    ]})
+
+
+# ── CORS-safe 404 handler (prevents CORS errors on missing routes) ─
+@app.errorhandler(404)
+def not_found(e):
+    return jsonify({"error": "Route not found"}), 404
+
+
 # ── Startup ───────────────────────────────────────────────────────
 with app.app_context():
     db.create_all()
