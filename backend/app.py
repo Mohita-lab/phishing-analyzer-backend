@@ -26,7 +26,7 @@ _allowed_origins = [o.strip() for o in _raw_origins.split(',') if o.strip()]
 # Fall back to permissive only in local dev (DEBUG=True)
 if not _allowed_origins:
     logger.warning("ALLOWED_ORIGINS not set — defaulting to localhost only.")
-    _allowed_origins = ['http://localhost:3000', 'http://localhost:5000']
+    _allowed_origins = ['http://localhost:3000', 'http://localhost:5000','https://gilded-trifle-133800.netlify.app']
 
 CORS(app, origins=_allowed_origins)
 
