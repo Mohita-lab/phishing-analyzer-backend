@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phishing Analyzer Dashboard</title>
+    <link rel="stylesheet" href="dashboard.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="dashboard-container">
+        <header>
+            <h1>🛡️ Phishing Analyzer Dashboard</h1>
+            <p>Real-time monitoring and analytics</p>
+            <div class="refresh-controls">
+                <button id="refresh-btn" class="refresh-button">🔄 Refresh</button>
+                <select id="time-range" class="time-range-select">
+                    <option value="7">Last 7 days</option>
+                    <option value="30" selected>Last 30 days</option>
+                    <option value="90">Last 90 days</option>
+                </select>
+            </div>
+        </header>
+
+        <!-- Overview Cards -->
+        <div class="overview-cards">
+            <div class="card">
+                <div class="card-icon">📧</div>
+                <div class="card-content">
+                    <div class="card-label">Total Analyses</div>
+                    <div class="card-value" id="total-analyses">-</div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-icon">⚠️</div>
+                <div class="card-content">
+                    <div class="card-label">Phishing Detected</div>
+                    <div class="card-value" id="phishing-count">-</div>
+                    <div class="card-sub" id="phishing-rate">-</div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-icon">📊</div>
+                <div class="card-content">
+                    <div class="card-label">Avg Risk Score</div>
+                    <div class="card-value" id="avg-risk-score">-</div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-icon">📝</div>
+                <div class="card-content">
+                    <div class="card-label">Reports Filed</div>
+                    <div class="card-value" id="report-count">-</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Section -->
+        <div class="charts-section">
+            <div class="chart-container">
+                <h3>📈 Analysis Trends</h3>
+                <canvas id="trends-chart"></canvas>
+            </div>
+            <div class="chart-container">
+                <h3>🎯 Risk Level Distribution</h3>
+                <canvas id="risk-distribution-chart"></canvas>
+            </div>
+        </div>
+
+        <!-- Tables Section -->
+        <div class="tables-section">
+            <div class="table-container">
+                <h3>🏆 Top Senders by Volume</h3>
+                <table id="top-senders-table">
+                    <thead>
+                        <tr>
+                            <th>Sender</th>
+                            <th>Emails</th>
+                            <th>Avg Risk</th>
+                            <th>Phishing Rate</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div class="table-container">
+                <h3>🔍 Top Phishing Indicators</h3>
+                <table id="top-indicators-table">
+                    <thead>
+                        <tr>
+                            <th>Indicator</th>
+                            <th>Count</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Alerts Section -->
+        <div class="alerts-section">
+            <h3>🚨 Recent Anomaly Alerts</h3>
+            <div id="alerts-container" class="alerts-container"></div>
+        </div>
+    </div>
+
+    <script src="dashboard.js"></script>
+</body>
+</html>
