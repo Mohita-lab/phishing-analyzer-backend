@@ -3,6 +3,7 @@ import uuid
 import logging
 from datetime import datetime, timezone
 from functools import wraps
+import urllib.request
 
 from flask import Flask, request, jsonify, g
 from flask_cors import CORS
@@ -13,6 +14,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from models import db, EmailAnalysis, PhishingReport, AnomalyAlert
 from analyzer import SimplePhishingAnalyzer
 from anomaly_detector import AnomalyDetector
+
 
 load_dotenv()
 
@@ -308,6 +310,15 @@ def analytics_recent_alerts():
 @app.errorhandler(404)
 def not_found(e):
     return jsonify({"error": "Route not found"}), 404
+
+def _keep_awake():
+    try:
+        urllib.request.urlopen('https://phishing-axis.onrender.com/health')
+        logger.info("Keep-awake ping sent.")
+    except:
+        pass
+
+scheduler.add_job(_keep_awake, 'interval', minutes=14, id='keep_awake')
 
 
 # ── Startup ───────────────────────────────────────────────────────
