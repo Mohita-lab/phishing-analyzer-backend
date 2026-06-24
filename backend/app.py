@@ -222,32 +222,44 @@ def acknowledge_alert(alert_id):
 @app.route("/api/analytics/overview")
 @require_auth
 def analytics_overview():
-    days = int(request.args.get("days", 30))
-    from sqlalchemy import func
+    try:
+        from sqlalchemy import func
 
-    total = db.session.query(func.count(EmailAnalysis.id)).filter(
-    EmailAnalysis.timestamp >= cutoff
-    ).scalar() or 0
-    phishing = EmailAnalysis.query.filter(
-        EmailAnalysis.is_phishing == True,
-        EmailAnalysis.timestamp >= cutoff
-    ).count()
-    safe       = total - phishing
-    avg_score = float(
-    db.session.query(
-        db.func.avg(EmailAnalysis.risk_score)
-    )
-    .filter(EmailAnalysis.timestamp >= cutoff)
-    .scalar() or 0
-    )
-    
-    return jsonify({
-        "total_analyzed": total,
-        "phishing_count": phishing,
-        "safe_count": safe,
-        "avg_risk_score": round(avg_score, 1),
-        "days": days,
-    })
+        days = int(request.args.get("days", 30))
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+        total = db.session.query(
+            func.count(EmailAnalysis.id)
+        ).filter(
+            EmailAnalysis.timestamp >= cutoff
+        ).scalar() or 0
+
+        phishing = EmailAnalysis.query.filter(
+            EmailAnalysis.is_phishing == True,
+            EmailAnalysis.timestamp >= cutoff
+        ).count()
+
+        safe = total - phishing
+
+        avg_score = float(
+            db.session.query(
+                db.func.avg(EmailAnalysis.risk_score)
+            ).filter(
+                EmailAnalysis.timestamp >= cutoff
+            ).scalar() or 0
+        )
+
+        return jsonify({
+            "total_analyzed": total,
+            "phishing_count": phishing,
+            "safe_count": safe,
+            "avg_risk_score": round(avg_score, 1),
+            "days": days
+        })
+
+    except Exception as e:
+        logger.exception("Overview analytics error")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/analytics/trends")
