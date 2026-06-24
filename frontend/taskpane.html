@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta http-equiv="X-UA-Compatible" content="IE=Edge"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!--
+    FIX 3: Added Content-Security-Policy to prevent XSS
+  -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' https://appsforoffice.microsoft.com;
+    style-src 'self' 'unsafe-inline';
+    connect-src 'self' https://phishing-axis.onrender.com;
+    img-src 'self' data:;
+    frame-ancestors 'none'
+  ">
+  <title>Phishing Email Analyzer</title>
+  <script type="text/javascript"
+    src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js">
+  </script>
+  <link rel="stylesheet" href="taskpane.css">
+</head>
+<body class="ms-Fabric">
+  <div class="container">
+
+    <header>
+      <!--
+        FIX 3: Moved logo into header, removed duplicate .header div below
+      -->
+      <img src="assets/icon-64.png" class="logo" alt="AXIS Security Shield"
+           onerror="this.style.display='none'">
+      <h1>Phishing Email Analyzer</h1>
+      <p>Analyze the current email for phishing indicators</p>
+    </header>
+
+    <!--
+      FIX 4: Added id="loading-text" span so taskpane.js showLoading(msg) works
+    -->
+    <div id="loading" class="hidden">
+      <div class="spinner"></div>
+      <p id="loading-text">Analyzing email...</p>
+    </div>
+
+    <div id="error" class="error-message hidden">
+      <p id="error-text"></p>
+    </div>
+
+    <div id="results" class="hidden">
+      <div class="result-header">
+        <h2>Analysis Results</h2>
+        <div id="verdict" class="verdict"></div>
+      </div>
+
+      <div class="score-section">
+        <div class="score-item">
+          <span class="label">Risk Score:</span>
+          <span id="risk-score" class="score"></span>
+        </div>
+        <div class="score-item">
+          <span class="label">Risk Level:</span>
+          <span id="risk-level" class="level"></span>
+        </div>
+      </div>
+
+      <div class="email-details">
+        <h3>Email Details</h3>
+        <div class="detail-row">
+          <span class="detail-label">From:</span>
+          <span id="sender"></span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Subject:</span>
+          <span id="subject"></span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Importance:</span>
+          <span id="importance"></span>
+        </div>
+      </div>
+
+      <div class="indicators">
+        <h3>Indicators</h3>
+        <div id="indicators-list"></div>
+      </div>
+
+      <div id="attachments-section" class="attachments hidden">
+        <h3>Attachments</h3>
+        <div id="attachments-list"></div>
+      </div>
+
+      <div id="report-section" class="report-section hidden">
+        <div class="report-warning">
+          <h3>⚠ High Risk Detected</h3>
+          <p>This email shows signs of being a phishing attempt.</p>
+        </div>
+        <div class="report-actions">
+          <button id="report-btn" class="report-button">Report to Security</button>
+          <button id="cancel-report-btn" class="cancel-button">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="initial-state">
+      <button id="analyze-btn" class="analyze-button">Analyze Email</button>
+    </div>
+
+  </div>
+  <script type="text/javascript" src="taskpane.js"></script>
+</body>
+</html>
