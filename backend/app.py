@@ -1,8 +1,9 @@
 import os
 import uuid
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from functools import wraps
+
 from flask import Flask, request, jsonify, g
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -33,23 +34,9 @@ db_url = os.getenv("DATABASE_URL", "sqlite:///phishing_analyzer.db")
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 
-if "sslmode" not in db_url:
-    db_url += "?sslmode=require"
-
 app.config["SQLALCHEMY_DATABASE_URI"] = db_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-change-me")
-
-app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-    "pool_pre_ping": True,
-    "pool_recycle": 280,
-    "pool_size": 5,
-    "max_overflow": 10,
-    "connect_args": {
-        "sslmode": "require"
-    }
-}
-
 db.init_app(app)
 
 # ── Services ──────────────────────────────────────────────────────
@@ -222,134 +209,92 @@ def acknowledge_alert(alert_id):
 @app.route("/api/analytics/overview")
 @require_auth
 def analytics_overview():
-    try:
-        from sqlalchemy import func
-
-        days = int(request.args.get("days", 30))
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-
-        total = db.session.query(
-            func.count(EmailAnalysis.id)
-        ).filter(
-            EmailAnalysis.timestamp >= cutoff
-        ).scalar() or 0
-
-        phishing = EmailAnalysis.query.filter(
-            EmailAnalysis.is_phishing == True,
-            EmailAnalysis.timestamp >= cutoff
-        ).count()
-
-        safe = total - phishing
-
-        avg_score = float(
-            db.session.query(
-                db.func.avg(EmailAnalysis.risk_score)
-            ).filter(
-                EmailAnalysis.timestamp >= cutoff
-            ).scalar() or 0
-        )
-
-        return jsonify({
-            "total_analyzed": total,
-            "phishing_count": phishing,
-            "safe_count": safe,
-            "avg_risk_score": round(avg_score, 1),
-            "days": days
-        })
-
-    except Exception as e:
-        logger.exception("Overview analytics error")
-        return jsonify({"error": str(e)}), 500
+    days      = int(request.args.get("days", 30))
+    total     = EmailAnalysis.query.count()
+    phishing  = EmailAnalysis.query.filter_by(is_phishing=True).count()
+    avg_score = db.session.query(db.func.avg(EmailAnalysis.risk_score)).scalar() or 0
+    reports   = PhishingReport.query.count()
+    return jsonify({
+        "total_analyzed": total,
+        "phishing_count": phishing,
+        "safe_count":     total - phishing,
+        "avg_risk_score": round(avg_score, 1),
+        "reports_filed":  reports,
+        "days":           days,
+    })
 
 
 @app.route("/api/analytics/trends")
 @require_auth
 def analytics_trends():
-    days = int(request.args.get("days", 30))
-
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-
-    records = EmailAnalysis.query.filter(
-        EmailAnalysis.timestamp >= cutoff
-    ).order_by(EmailAnalysis.timestamp.desc()).all()
-
+    days    = int(request.args.get("days", 30))
+    records = EmailAnalysis.query.order_by(EmailAnalysis.timestamp.desc()).limit(days * 10).all()
     by_date = {}
-
     for r in records:
         date = r.timestamp.strftime("%Y-%m-%d")
-
         if date not in by_date:
-            by_date[date] = {
-                "date": date,
-                "total": 0,
-                "phishing": 0
-            }
-
+            by_date[date] = {"date": date, "total": 0, "phishing": 0, "safe": 0}
         by_date[date]["total"] += 1
-
         if r.is_phishing:
             by_date[date]["phishing"] += 1
-
-    trends = sorted(by_date.values(), key=lambda x: x["date"])
-
-    return jsonify({
-        "trends": trends,
-        "days": days
-    })
+        else:
+            by_date[date]["safe"] += 1
+    # Plain array — dashboard calls .forEach() directly
+    return jsonify(sorted(by_date.values(), key=lambda x: x["date"]))
 
 
 @app.route("/api/analytics/top-senders")
 @require_auth
 def analytics_top_senders():
-    days = int(request.args.get("days", 30))
-
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-    
-    results = (
-        db.session.query(
-            EmailAnalysis.sender,
-            db.func.count(EmailAnalysis.id).label("count")
-        )
-        .filter(EmailAnalysis.timestamp >= cutoff)
-        .group_by(EmailAnalysis.sender)
-        .order_by(db.func.count(EmailAnalysis.id).desc())
-        .limit(10)
-        .all()
-    )
-    return jsonify({"top_senders": [{"sender": r.sender, "count": r.count} for r in results]})
+    records = EmailAnalysis.query.all()
+    senders = {}
+    for r in records:
+        s = r.sender
+        if s not in senders:
+            senders[s] = {"sender": s, "email_count": 0, "total_score": 0, "phishing": 0}
+        senders[s]["email_count"]  += 1
+        senders[s]["total_score"]  += r.risk_score
+        if r.is_phishing:
+            senders[s]["phishing"] += 1
+    result = []
+    for s in senders.values():
+        result.append({
+            "sender":         s["sender"],
+            "email_count":    s["email_count"],
+            "avg_risk_score": round(s["total_score"] / s["email_count"], 1),
+            "phishing_rate":  round(s["phishing"] / s["email_count"] * 100, 1),
+        })
+    result.sort(key=lambda x: x["email_count"], reverse=True)
+    # Plain array — dashboard calls .forEach() directly
+    return jsonify(result[:10])
 
 
 @app.route("/api/analytics/top-indicators")
 @require_auth
 def analytics_top_indicators():
-    counts = {}
-    days = int(request.args.get("days", 30))
-    
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-    
-    records = EmailAnalysis.query.filter(
-    EmailAnalysis.is_phishing == True,
-    EmailAnalysis.timestamp >= cutoff
-).all()
+    records = EmailAnalysis.query.filter_by(is_phishing=True).all()
+    counts  = {}
     for r in records:
         for ind in (r.indicators or []):
             title = ind.get("title", "Unknown")
             counts[title] = counts.get(title, 0) + 1
-    sorted_indicators = sorted(counts.items(), key=lambda x: x[1], reverse=True)[:10]
-    return jsonify({"top_indicators": [{"title": t, "count": c} for t, c in sorted_indicators]})
+    sorted_ind = sorted(counts.items(), key=lambda x: x[1], reverse=True)[:10]
+    # Plain array — dashboard calls .forEach() directly
+    return jsonify([{"indicator": t, "count": c} for t, c in sorted_ind])
 
 
 @app.route("/api/analytics/recent-alerts")
 @require_auth
 def analytics_recent_alerts():
-    limit = int(request.args.get("limit", 10))
+    limit  = int(request.args.get("limit", 10))
     alerts = AnomalyAlert.query.order_by(AnomalyAlert.timestamp.desc()).limit(limit).all()
-    return jsonify({"alerts": [
+    # Plain array — dashboard calls .forEach() directly
+    return jsonify([
         {"id": a.id, "alert_type": a.alert_type, "severity": a.severity,
          "description": a.description, "timestamp": a.timestamp.isoformat(),
          "acknowledged": a.acknowledged}
         for a in alerts
-    ]})
+    ])
 
 
 # ── CORS-safe 404 handler (prevents CORS errors on missing routes) ─
