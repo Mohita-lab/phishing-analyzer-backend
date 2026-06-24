@@ -233,7 +233,13 @@ def analytics_overview():
         EmailAnalysis.timestamp >= cutoff
     ).count()
     safe       = total - phishing
-    avg_score  = float(db.session.query(db.func.avg(EmailAnalysis.risk_score)).scalar() or 0)
+    avg_score = float(
+    db.session.query(
+        db.func.avg(EmailAnalysis.risk_score)
+    )
+    .filter(EmailAnalysis.timestamp >= cutoff)
+    .scalar() or 0
+    )
     
     return jsonify({
         "total_analyzed": total,
@@ -248,21 +254,36 @@ def analytics_overview():
 @require_auth
 def analytics_trends():
     days = int(request.args.get("days", 30))
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
     records = EmailAnalysis.query.filter(
         EmailAnalysis.timestamp >= cutoff
     ).order_by(EmailAnalysis.timestamp.desc()).all()
-    # Group by date
+
     by_date = {}
-    
+
     for r in records:
         date = r.timestamp.strftime("%Y-%m-%d")
+
         if date not in by_date:
-            by_date[date] = {"date": date, "total": 0, "phishing": 0}
+            by_date[date] = {
+                "date": date,
+                "total": 0,
+                "phishing": 0
+            }
+
         by_date[date]["total"] += 1
+
         if r.is_phishing:
             by_date[date]["phishing"] += 1
+
     trends = sorted(by_date.values(), key=lambda x: x["date"])
-    return jsonify({"trends": trends, "days": days})
+
+    return jsonify({
+        "trends": trends,
+        "days": days
+    })
 
 
 @app.route("/api/analytics/top-senders")
