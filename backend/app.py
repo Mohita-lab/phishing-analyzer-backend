@@ -88,6 +88,15 @@ def require_auth(f):
 
     return decorated
 
+def require_role(*roles):
+    def decorator(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            if g.get("role") not in roles:
+                return jsonify({"error": "Insufficient permissions"}), 403
+            return f(*args, **kwargs)
+        return wrapper
+    return decorator
 # ── Routes ────────────────────────────────────────────────────────
 @app.route("/health")
 def health():
@@ -268,10 +277,9 @@ def analytics_top_senders():
 
     rows = (
         db.session.query(
-            EmailAnalysis.sender,
-            func.count(EmailAnalysis.id),
-            func.sum(EmailAnalysis.risk_score),
-            func.sum(phishing_case)
+            func.count(EmailAnalysis.id).label("email_count"),
+            func.sum(EmailAnalysis.risk_score).label("total_score"),
+            func.sum(phishing_case).label("phishing_count")
         )
         .group_by(EmailAnalysis.sender)
         .order_by(func.count(EmailAnalysis.id).desc())
