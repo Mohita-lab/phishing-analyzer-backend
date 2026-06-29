@@ -27,7 +27,13 @@ if not origins:
     origins = ["http://localhost:3000", "https://mohita-lab.github.io/phishing-analyzer/frontend"]
     logger.warning("ALLOWED_ORIGINS not set — using defaults.")
 
-CORS(app, origins=origins, allow_headers=["Content-Type", "Authorization"], methods=["GET", "POST", "OPTIONS"])
+CORS(
+    app,
+    origins=origins,
+    supports_credentials=True,
+    allow_headers=["Content-Type", "Authorization"],
+    methods=["GET", "POST", "OPTIONS"]
+)
 
 # ── Database ──────────────────────────────────────────────────────
 db_url = os.getenv("DATABASE_URL", "sqlite:///phishing_analyzer.db")
@@ -65,28 +71,22 @@ VALID_TOKENS = _load_tokens()
 def require_auth(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        if request.method == "OPTIONS":
-            return "", 200
+
         header = request.headers.get("Authorization", "")
+
         if not header.startswith("Bearer "):
             return jsonify({"error": "Missing Authorization header"}), 401
+
         token = header[len("Bearer "):]
         role = VALID_TOKENS.get(token)
+
         if not role:
             return jsonify({"error": "Invalid API token"}), 401
+
         g.role = role
         return f(*args, **kwargs)
-    return decorated
 
-def require_role(*roles):
-    def decorator(f):
-        @wraps(f)
-        def decorated(*args, **kwargs):
-            if g.get("role") not in roles:
-                return jsonify({"error": "Insufficient permissions"}), 403
-            return f(*args, **kwargs)
-        return decorated
-    return decorator
+    return decorated
 
 # ── Routes ────────────────────────────────────────────────────────
 @app.route("/health")
