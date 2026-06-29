@@ -7,7 +7,7 @@ from functools import wraps
 from flask import Flask, request, jsonify, g
 from flask_cors import CORS
 from dotenv import load_dotenv
-from sqlalchemy import text
+from sqlalchemy import text, func, case
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from models import db, EmailAnalysis, PhishingReport, AnomalyAlert
@@ -288,7 +288,7 @@ def analytics_top_senders():
         result.append({
             "sender": sender,
             "email_count": email_count,
-            "avg_risk_score": round(total_score / email_count, 1),
+             avg = round((total_score or 0) / email_count, 1) if email_count else 0,
             "phishing_rate": round((phishing_count / email_count) * 100, 1),
         })
 
