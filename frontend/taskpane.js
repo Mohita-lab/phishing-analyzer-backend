@@ -15,7 +15,7 @@ const API_TOKEN = "testtoken123";
 let currentEmailText = "";
 let currentAnalysis = null;
 
-// ── TEST BACKEND ON LOAD (SAFE) ──────────────────────────────────
+// ── TEST BACKEND ON LOAD ─────────────────────────────────────────
 async function testBackendConnection() {
     try {
         const res = await fetch(`${API_BASE}/health`);
@@ -30,8 +30,6 @@ testBackendConnection();
 // ── INIT ─────────────────────────────────────────────────────────
 Office.onReady((info) => {
     const analyzeBtn = document.getElementById("analyze-btn");
-    const reportBtn = document.getElementById("report-btn");
-    const cancelBtn = document.getElementById("cancel-report-btn");
 
     if (info.host === Office.HostType.Outlook) {
         analyzeBtn.addEventListener("click", analyzeEmail);
@@ -39,9 +37,6 @@ Office.onReady((info) => {
         analyzeBtn.textContent = "Test with Sample Email";
         analyzeBtn.addEventListener("click", analyzeTestEmail);
     }
-
-    if (reportBtn) reportBtn.addEventListener("click", reportPhishing);
-    if (cancelBtn) cancelBtn.addEventListener("click", cancelReport);
 });
 
 // ────────────────────────────────────────────────────────────────
@@ -106,7 +101,7 @@ http://fake-login.xyz
 }
 
 // ────────────────────────────────────────────────────────────────
-// API CALL (FIXED)
+// API CALL
 // ────────────────────────────────────────────────────────────────
 async function callAPI(url, payload) {
     let res;
@@ -133,7 +128,7 @@ async function callAPI(url, payload) {
 }
 
 // ────────────────────────────────────────────────────────────────
-// REPORT
+// REPORT (ALWAYS AVAILABLE NOW)
 // ────────────────────────────────────────────────────────────────
 async function reportPhishing() {
     try {
@@ -176,7 +171,7 @@ async function reportPhishing() {
 }
 
 // ────────────────────────────────────────────────────────────────
-// UI
+// UI (UPDATED: REPORT BUTTON ALWAYS SHOWN)
 // ────────────────────────────────────────────────────────────────
 function displayResults(data) {
     hideLoading();
@@ -195,6 +190,21 @@ function displayResults(data) {
     } else {
         verdict.innerText = "✓ SAFE EMAIL";
     }
+
+    // ✅ ALWAYS SHOW REPORT BUTTON (FIX)
+    const reportSection = document.getElementById("report-section");
+
+    reportSection.classList.remove("hidden");
+    reportSection.innerHTML = `
+        <div class="report-actions">
+            <button id="report-btn" class="report-button">
+                Report Email
+            </button>
+        </div>
+    `;
+
+    document.getElementById("report-btn")
+        .addEventListener("click", reportPhishing);
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -218,4 +228,11 @@ function hideLoading() {
 
 function showError(msg) {
     alert(msg);
+}
+
+function resetAnalysis() {
+    document.getElementById("results").classList.add("hidden");
+    document.getElementById("report-section").classList.add("hidden");
+    currentEmailText = "";
+    currentAnalysis = null;
 }
