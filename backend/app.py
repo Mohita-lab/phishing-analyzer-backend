@@ -260,28 +260,39 @@ def analytics_trends():
 @app.route("/api/analytics/top-senders")
 @require_auth
 def analytics_top_senders():
-    records = EmailAnalysis.query.all()
-    senders = {}
-    for r in records:
-        s = r.sender
-        if s not in senders:
-            senders[s] = {"sender": s, "email_count": 0, "total_score": 0, "phishing": 0}
-        senders[s]["email_count"]  += 1
-        senders[s]["total_score"]  += r.risk_score
-        if r.is_phishing:
-            senders[s]["phishing"] += 1
-    result = []
-    for s in senders.values():
-        result.append({
-            "sender":         s["sender"],
-            "email_count":    s["email_count"],
-            "avg_risk_score": round(s["total_score"] / s["email_count"], 1),
-            "phishing_rate":  round(s["phishing"] / s["email_count"] * 100, 1),
-        })
-    result.sort(key=lambda x: x["email_count"], reverse=True)
-    # Plain array — dashboard calls .forEach() directly
-    return jsonify(result[:10])
 
+    phishing_case = case(
+        (EmailAnalysis.is_phishing == True, 1),
+        else_=0
+    )
+
+    rows = (
+        db.session.query(
+            EmailAnalysis.sender,
+            func.count(EmailAnalysis.id).label("email_count"),
+            func.sum(EmailAnalysis.risk_score).label("total_score"),
+            func.sum(phishing_case).label("phishing_count")
+        )
+        .group_by(EmailAnalysis.sender)
+        .order_by(func.count(EmailAnalysis.id).desc())
+        .limit(10)
+        .all()
+    )
+
+    result = []
+    for sender, email_count, total_score, phishing_count in rows:
+
+        phishing_count = phishing_count or 0
+        total_score = total_score or 0
+
+        result.append({
+            "sender": sender,
+            "email_count": email_count,
+            "avg_risk_score": round(total_score / email_count, 1),
+            "phishing_rate": round((phishing_count / email_count) * 100, 1),
+        })
+
+    return jsonify(result)
 
 @app.route("/api/analytics/top-indicators")
 @require_auth
