@@ -32,46 +32,29 @@ function checkAuthentication() {
     return true;
 }
 
-async function reportPhishing() {
-    try {
-        if (!currentEmailText || !currentAnalysis) {
-            showError('No email data available. Please analyse first.');
-            return;
-        }
-
-        showLoading('Submitting report…');
-
-        const data = await postToBackend(REPORT_ENDPOINT, {
-            sender: currentAnalysis.sender,
-            subject: currentAnalysis.subject,
-            risk_score: currentAnalysis.risk_score,
-            risk_level: currentAnalysis.risk_level,
-            analysis_data: currentAnalysis
-        });
-
-        hideLoading();
-
-        // ✅ SHOW IN UI (THIS IS WHAT YOU ASKED FOR)
-        document.getElementById('report-section').innerHTML = `
-            <div class="report-success">
-                <h3>✅ Report Sent Successfully</h3>
-                <p>Email has been forwarded to security system.</p>
-                <p><b>Report ID:</b> ${data.report_id}</p>
-
-                <button id="new-analysis-btn" class="analyze-button">
-                    Analyse Another Email
-                </button>
-            </div>
-        `;
-
-        document.getElementById('new-analysis-btn')
-            .addEventListener('click', resetAnalysis);
-
-    } catch (err) {
-        console.error(err);
-        showError('Failed to submit report');
+async function authenticatedFetch(url, options = {}) {
+    if (!authToken && !checkAuthentication()) {
+        throw new Error('Authentication required');
     }
+
+    options.headers = options.headers || {};
+    options.headers['Authorization'] = `Bearer ${authToken}`;
+
+    const response = await fetch(url, options);
+
+    if (response.status === 401) {
+        // Token invalid — clear and prompt again
+        authToken = '';
+        if (checkAuthentication()) {
+            options.headers['Authorization'] = `Bearer ${authToken}`;
+            return fetch(url, options);
+        }
+        throw new Error('Authentication failed');
+    }
+
+    return response;
 }
+
 // ── Initialization ────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
 
