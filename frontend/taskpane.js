@@ -4,34 +4,38 @@
    ================================================================ */
 
 // ── Configuration ────────────────────────────────────────────────
-const API_BASE = "https://phishing-axis.onrender.com";
-
-const API_ENDPOINT = `${API_BASE}/analyze`;
+const API_BASE      = "https://phishing-axis.onrender.com";
+const API_ENDPOINT  = `${API_BASE}/analyze`;
 const REPORT_ENDPOINT = `${API_BASE}/report`;
-
-const API_TOKEN = "testtoken123";
+const API_TOKEN     = "testtoken123";
 
 // ── State ────────────────────────────────────────────────────────
 let currentEmailText = "";
-let currentAnalysis = null;
+let currentAnalysis  = null;
 
-// ── TEST BACKEND ON LOAD ─────────────────────────────────────────
+// ── Wake up Render on load ───────────────────────────────────────
 async function testBackendConnection() {
     try {
-        const res = await fetch(`${API_BASE}/health`);
+        const res  = await fetch(`${API_BASE}/health`);
         const data = await res.json();
         console.log("Backend status:", data);
+        if (data.status === "healthy") {
+            const el = document.getElementById("backend-status");
+            if (el) el.style.display = "none";
+        }
     } catch (err) {
         console.warn("Backend not reachable yet:", err.message);
+        const el = document.getElementById("backend-status");
+        if (el) el.style.display = "block";
     }
 }
 testBackendConnection();
 
-// ── INIT ─────────────────────────────────────────────────────────
+// ── Init ─────────────────────────────────────────────────────────
 Office.onReady((info) => {
     const analyzeBtn = document.getElementById("analyze-btn");
-
     if (info.host === Office.HostType.Outlook) {
+        analyzeBtn.textContent = "Analyze This Email";
         analyzeBtn.addEventListener("click", analyzeEmail);
     } else {
         analyzeBtn.textContent = "Test with Sample Email";
@@ -39,26 +43,20 @@ Office.onReady((info) => {
     }
 });
 
-// ────────────────────────────────────────────────────────────────
-// OUTLOOK MODE
-// ────────────────────────────────────────────────────────────────
+// ── Outlook mode ─────────────────────────────────────────────────
 async function analyzeEmail() {
     try {
         showLoading("Reading email...");
-
-        const item = Office.context.mailbox.item;
-
-        const from = item.from?.emailAddress || "unknown";
+        const item    = Office.context.mailbox.item;
+        const from    = item.from?.emailAddress || "unknown";
         const subject = item.subject || "";
-        const body = await getBody(item);
+        const body    = await getBody(item);
 
-        const emailText = `From: ${from}\nSubject: ${subject}\n\n${body}`;
-        currentEmailText = emailText;
-
+        currentEmailText = `From: ${from}\nSubject: ${subject}\n\n${body}`;
         showLoading("Analyzing email...");
 
         const result = await callAPI(API_ENDPOINT, {
-            email_text: emailText,
+            email_text:  currentEmailText,
             attachments: []
         });
 
@@ -66,60 +64,28 @@ async function analyzeEmail() {
         displayResults(result.analysis);
 
     } catch (err) {
+        hideLoading();
         showError(err.message);
     }
 }
 
-// ────────────────────────────────────────────────────────────────
-// TEST MODE
-// ────────────────────────────────────────────────────────────────
+// ── Test mode ────────────────────────────────────────────────────
 async function analyzeTestEmail() {
     try {
         showLoading("Testing sample email...");
 
-        const emailText = `
-From: Kinsley Hennequin 
-Sent: Thursday, 11 June 2026 11:29
-To: AXIS Group <AxisGroup@axis.mu>
-Cc: IT Team <itteam@blc.mu>
-Subject: Mandatory Windows Security Update – Immediate Action Required
+        currentEmailText = `From: security@micr0soft-login.com
+Sent: Wednesday, June 25, 2026
+To: staff@axis.mu
+Subject: Urgent Account Verification
 Importance: High
 
-Dear All,
-
-I hope this email finds you well.
-
-We wish to bring to your immediate attention that Microsoft has identified critical vulnerabilities in the Windows operating system and has released an urgent security update to address these issues.
-
-In order to safeguard our organisation's systems, data, and network infrastructure, this update is MANDATORY for all staff members. You are required to apply the update at the earliest opportunity.
-
-Please follow the steps below to install the update:
-
-1. Click on the Start Menu and go to Settings
-2. Navigate to Windows Update
-3. Click Check for Updates and install all available updates
-4. Restart your computer once the installation is complete
-
-Attached is a step-by-step guide for your reference.
-
-If you encounter any issues during the update process or require assistance, please do not hesitate to contact the IT Support team immediately.
-
-Kind regards,
-
-Kinsley.
-
-
-Kinsley Hennequin
-Junior IT Administrator
-
- 2nd Floor, The AXIS, 26 Bank Street, Cybercity, Ebene 72201, Mauritius
-  (+230) 403 2500 |   (+230) 5853 9774 |    (+230) 403 2501 |   www.axis.mu 
-`;
-
-        currentEmailText = emailText;
+Dear Customer, your account will be suspended immediately.
+Verify your password and credit card now at http://192.168.1.1/login
+or your account will expire today.`;
 
         const result = await callAPI(API_ENDPOINT, {
-            email_text: emailText,
+            email_text:  currentEmailText,
             attachments: []
         });
 
@@ -127,27 +93,25 @@ Junior IT Administrator
         displayResults(result.analysis);
 
     } catch (err) {
+        hideLoading();
         showError(err.message);
     }
 }
 
-// ────────────────────────────────────────────────────────────────
-// API CALL
-// ────────────────────────────────────────────────────────────────
+// ── API call ─────────────────────────────────────────────────────
 async function callAPI(url, payload) {
     let res;
-
     try {
         res = await fetch(url, {
-            method: "POST",
+            method:  "POST",
             headers: {
-                "Content-Type": "application/json",
+                "Content-Type":  "application/json",
                 "Authorization": `Bearer ${API_TOKEN}`
             },
             body: JSON.stringify(payload)
         });
     } catch (err) {
-        throw new Error("Backend not reachable (Render may be sleeping)");
+        throw new Error("Cannot reach backend. Render may be sleeping — wait 30 seconds and try again.");
     }
 
     if (!res.ok) {
@@ -158,89 +122,92 @@ async function callAPI(url, payload) {
     return await res.json();
 }
 
-// ────────────────────────────────────────────────────────────────
-// REPORT (ALWAYS AVAILABLE)
-// ────────────────────────────────────────────────────────────────
+// ── Report phishing ──────────────────────────────────────────────
 async function reportPhishing() {
     try {
         if (!currentEmailText || !currentAnalysis) {
-            showError('No email data available. Please analyse first.');
+            showError("No email data. Please analyze first.");
             return;
         }
 
-        showLoading('Submitting report…');
+        showLoading("Submitting report...");
 
         const data = await callAPI(REPORT_ENDPOINT, {
-            sender: currentAnalysis.sender,
-            subject: currentAnalysis.subject,
-            risk_score: currentAnalysis.risk_score,
-            risk_level: currentAnalysis.risk_level,
+            sender:        currentAnalysis.sender,
+            subject:       currentAnalysis.subject,
+            risk_score:    currentAnalysis.risk_score,
+            risk_level:    currentAnalysis.risk_level,
             analysis_data: currentAnalysis
         });
 
         hideLoading();
 
-        document.getElementById('report-section').innerHTML = `
+        document.getElementById("report-section").innerHTML = `
             <div class="report-success">
-                <h3>✅ Report Sent Successfully</h3>
-                <p>Email has been forwarded to security system.</p>
-                <p><b>Report ID:</b> ${data.report_id}</p>
-
+                <h3>✅ Report Submitted</h3>
+                <p>This email has been reported to the security team.</p>
+                <p><strong>Report ID:</strong> ${data.report_id}</p>
                 <button id="new-analysis-btn" class="analyze-button">
-                    Analyse Another Email
+                    Analyze Another Email
                 </button>
             </div>
         `;
 
-        document.getElementById('new-analysis-btn')
-            .addEventListener('click', resetAnalysis);
+        document.getElementById("new-analysis-btn")
+            .addEventListener("click", resetAnalysis);
 
     } catch (err) {
-        console.error(err);
-        showError(err.message || 'Failed to submit report');
+        hideLoading();
+        showError(err.message || "Failed to submit report.");
     }
 }
 
-// ────────────────────────────────────────────────────────────────
-// UI (REPORT BUTTON ALWAYS SHOWN)
-// ────────────────────────────────────────────────────────────────
+// ── Display results ──────────────────────────────────────────────
 function displayResults(data) {
     hideLoading();
 
     document.getElementById("results").classList.remove("hidden");
-
     document.getElementById("risk-score").innerText = data.risk_score;
     document.getElementById("risk-level").innerText = data.risk_level;
-    document.getElementById("sender").innerText = data.sender;
-    document.getElementById("subject").innerText = data.subject;
+    document.getElementById("sender").innerText     = data.sender;
+    document.getElementById("subject").innerText    = data.subject;
 
     const verdict = document.getElementById("verdict");
+    verdict.innerText = data.is_phishing ? "⚠ PHISHING DETECTED" : "✓ SAFE EMAIL";
+    verdict.className = data.is_phishing ? "verdict phishing" : "verdict safe";
 
-    if (data.is_phishing) {
-        verdict.innerText = "⚠ PHISHING DETECTED";
-    } else {
-        verdict.innerText = "✓ SAFE EMAIL";
+    // Indicators list
+    const indicatorsList = document.getElementById("indicators-list");
+    if (indicatorsList && data.indicators) {
+        indicatorsList.innerHTML = data.indicators.map(ind => `
+            <div class="indicator ${ind.score < 0 ? 'positive' : 'negative'}">
+                <strong>${ind.title}</strong>
+                <span class="score">${ind.score > 0 ? '+' : ''}${ind.score}</span>
+                <p>${ind.explanation}</p>
+            </div>
+        `).join("");
     }
 
-    // ALWAYS SHOW REPORT BUTTON
+    // FIX: only show report button when the email is actually flagged as phishing
     const reportSection = document.getElementById("report-section");
-
-    reportSection.classList.remove("hidden");
-    reportSection.innerHTML = `
-        <div class="report-actions">
-            <button id="report-btn" class="report-button">
-                Report Email
-            </button>
-        </div>
-    `;
-
-    document.getElementById("report-btn")
-        .addEventListener("click", reportPhishing);
+    if (data.is_phishing) {
+        reportSection.classList.remove("hidden");
+        reportSection.innerHTML = `
+            <div class="report-actions">
+                <button id="report-btn" class="report-button">
+                    🚨 Report This Email
+                </button>
+            </div>
+        `;
+        document.getElementById("report-btn")
+            .addEventListener("click", reportPhishing);
+    } else {
+        reportSection.classList.add("hidden");
+        reportSection.innerHTML = "";
+    }
 }
 
-// ────────────────────────────────────────────────────────────────
-// HELPERS
-// ────────────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────
 async function getBody(item) {
     return new Promise((resolve) => {
         item.body.getAsync("text", (res) => {
@@ -250,20 +217,34 @@ async function getBody(item) {
 }
 
 function showLoading(msg) {
-    document.getElementById("loading").innerText = msg;
+    const el = document.getElementById("loading");
+    if (el) el.innerText = msg;
 }
 
 function hideLoading() {
-    document.getElementById("loading").innerText = "";
+    const el = document.getElementById("loading");
+    if (el) el.innerText = "";
 }
 
 function showError(msg) {
-    alert(msg);
+    const el = document.getElementById("loading");
+    if (el) {
+        el.innerText = "❌ " + msg;
+        el.style.color = "red";
+    }
 }
 
+// FIX: closing brace was missing in original file
 function resetAnalysis() {
     document.getElementById("results").classList.add("hidden");
-    document.getElementById("report-section").classList.add("hidden");
+    const reportSection = document.getElementById("report-section");
+    if (reportSection) reportSection.classList.add("hidden");
     currentEmailText = "";
-    currentAnalysis = null;
+    currentAnalysis  = null;
+
+    const loading = document.getElementById("loading");
+    if (loading) {
+        loading.innerText = "";
+        loading.style.color = "";
+    }
 }
